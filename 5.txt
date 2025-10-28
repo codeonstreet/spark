@@ -1,0 +1,125 @@
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.model_selection import train_test_split
+
+def create_customer_transaction_features(customers: pd.DataFrame, transactions: pd.DataFrame) -> pd.DataFrame:
+    """Create features by aggregating transaction data for each customer"""
+    
+    # Convert transaction_date to datetime if not already
+    transactions['transaction_date'] = pd.to_datetime(transactions['transaction_date'])
+    
+    # Calculate transaction aggregates per customer
+    transaction_agg = transactions.groupby('customer_id').agg({
+        'transaction_amount': ['mean', 'std', 'sum', 'count'],
+        'transaction_date': ['min', 'max'],
+        'is_fraud': 'sum'
+    }).reset_index()
+    
+    # Flatten column names
+    transaction_agg.columns = [
+        'customer_id',
+        'transaction_amount_avg',
+        'transaction_amount_std',
+        'transaction_amount_total',
+        'transaction_frequency',
+        'first_transaction_date',
+        'last_transaction_date',
+        'fraudulent_transactions_count'
+    ]
+    
+    # Calculate customer tenure in days
+    transaction_agg['customer_tenure_days'] = (
+        transaction_agg['last_transaction_date'] - transaction_agg['first_transaction_date']
+    ).dt.days
+    
+    # Merge with customer data
+    features_df = pd.merge(customers, transaction_agg, on='customer_id', how='left')
+    
+    # Fill NaN values for customers with no transactions
+    features_df['transaction_amount_avg'] = features_df['transaction_amount_avg'].fillna(0)
+    features_df['transaction_amount_std'] = features_df['transaction_amount_std'].fillna(0)
+    features_df['transaction_amount_total'] = features_df['transaction_amount_total'].fillna(0)
+    features_df['transaction_frequency'] = features_df['transaction_frequency'].fillna(0)
+    features_df['fraudulent_transactions_count'] = features_df['fraudulent_transactions_count'].fillna(0)
+    features_df['customer_tenure_days'] = features_df['customer_tenure_days'].fillna(0)
+    
+    return features_df
+
+def create_target_variable(features_df: pd.DataFrame) -> pd.DataFrame:
+    """Create target variable for classification (churn risk)"""
+    
+    # Create churn risk based on business rules
+    conditions = [
+        (features_df['transaction_frequency'] == 0) | 
+        (features_df['account_balance'] < 100) |
+        (features_df['fraudulent_transactions_count'] > 0),
+        
+        (features_df['transaction_frequency'] < 5) |
+        (features_df['account_balance'] < 1000) |
+        (features_df['credit_score'] < 580),
+        
+        (features_df['transaction_frequency'] >= 5) &
+        (features_df['account_balance'] >= 1000) &
+        (features_df['credit_score'] >= 580)
+    ]
+    
+    choices = [2, 1, 0]  # 2: High risk, 1: Medium risk, 0: Low risk
+    
+    features_df['churn_risk'] = np.select(conditions, choices, default=0)
+    
+    return features_df
+
+def engineer_features(features_df: pd.DataFrame) -> pd.DataFrame:
+    """Perform additional feature engineering"""
+    
+    # Create new features
+    features_df['balance_to_income_ratio'] = features_df['account_balance'] / features_df['annual_income']
+    features_df['avg_transaction_to_balance'] = features_df['transaction_amount_avg'] / features_df['account_balance']
+    features_df['fraud_ratio'] = features_df['fraudulent_transactions_count'] / features_df['transaction_frequency']
+    features_df['fraud_ratio'] = features_df['fraud_ratio'].fillna(0)
+    
+    # Create age groups
+    features_df['age_group'] = pd.cut(
+        features_df['age'],
+        bins=[0, 25, 35, 45, 55, 65, 100],
+        labels=['18-25', '26-35', '36-45', '46-55', '56-65', '65+']
+    )
+    
+    # Create income categories
+    features_df['income_category'] = pd.cut(
+        features_df['annual_income'],
+        bins=[0, 30000, 60000, 100000, 200000, float('inf')],
+        labels=['Very Low', 'Low', 'Medium', 'High', 'Very High']
+    )
+    
+    return features_df
+
+def prepare_model_data(features_df: pd.DataFrame, parameters: dict) -> tuple:
+    """Prepare data for model training"""
+    
+    # Select features and target
+    numerical_features = parameters["numerical_features"]
+    categorical_features = parameters["categorical_features"]
+    target_column = parameters["target_column"]
+    
+    all_features = numerical_features + categorical_features
+    
+    # Ensure all features exist
+    available_features = [f for f in all_features if f in features_df.columns]
+    X = features_df[available_features]
+    y = features_df[target_column]
+    
+    return X, y, available_features
+
+def split_data(X: pd.DataFrame, y: pd.Series, parameters: dict) -> tuple:
+    """Split data into train and test sets"""
+    
+    test_size = parameters["test_size"]
+    random_state = parameters["random_state"]
+    
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state, stratify=y
+    )
+    
+    return X_train, X_test, y_train, y_test
