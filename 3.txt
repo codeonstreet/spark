@@ -1,0 +1,145 @@
+import pandas as pd
+import numpy as np
+from pyspark.sql import SparkSession
+from pyspark.sql.types import *
+from pyspark.sql import functions as F
+from datetime import datetime, timedelta
+import random
+
+def generate_customer_data_spark(num_customers: int) -> pd.DataFrame:
+    """Generate customer data using PySpark"""
+    
+    # Initialize Spark session
+    spark = SparkSession.builder \
+        .appName("CustomerDataGeneration") \
+        .config("spark.sql.adaptive.enabled", "true") \
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
+        .getOrCreate()
+    
+    # Schema for customer data
+    customer_schema = StructType([
+        StructField("customer_id", StringType(), True),
+        StructField("age", IntegerType(), True),
+        StructField("gender", StringType(), True),
+        StructField("annual_income", DoubleType(), True),
+        StructField("credit_score", IntegerType(), True),
+        StructField("account_balance", DoubleType(), True),
+        StructField("employment_status", StringType(), True),
+        StructField("education_level", StringType(), True),
+        StructField("marital_status", StringType(), True),
+        StructField("num_dependents", IntegerType(), True),
+        StructField("years_with_bank", IntegerType(), True),
+        StructField("total_products", IntegerType(), True)
+    ])
+    
+    # Generate data
+    customer_data = []
+    for i in range(num_customers):
+        customer_id = f"CUST_{i:08d}"
+        age = random.randint(18, 80)
+        gender = random.choice(["Male", "Female"])
+        annual_income = random.uniform(20000, 200000)
+        credit_score = random.randint(300, 850)
+        account_balance = random.uniform(1000, 100000)
+        employment_status = random.choice(["Employed", "Self-Employed", "Unemployed", "Retired"])
+        education_level = random.choice(["High School", "Bachelor", "Master", "PhD"])
+        marital_status = random.choice(["Single", "Married", "Divorced", "Widowed"])
+        num_dependents = random.randint(0, 5)
+        years_with_bank = random.randint(0, 20)
+        total_products = random.randint(1, 6)
+        
+        customer_data.append((
+            customer_id, age, gender, annual_income, credit_score,
+            account_balance, employment_status, education_level,
+            marital_status, num_dependents, years_with_bank, total_products
+        ))
+    
+    # Create Spark DataFrame
+    customer_df = spark.createDataFrame(customer_data, customer_schema)
+    
+    # Convert to pandas for Kedro compatibility
+    pandas_df = customer_df.toPandas()
+    
+    spark.stop()
+    
+    return pandas_df
+
+def generate_transaction_data_spark(num_transactions: int, start_date: str, end_date: str, customer_ids: list) -> pd.DataFrame:
+    """Generate transaction data using PySpark"""
+    
+    spark = SparkSession.builder \
+        .appName("TransactionDataGeneration") \
+        .config("spark.sql.adaptive.enabled", "true") \
+        .getOrCreate()
+    
+    # Schema for transaction data
+    transaction_schema = StructType([
+        StructField("transaction_id", StringType(), True),
+        StructField("customer_id", StringType(), True),
+        StructField("transaction_date", TimestampType(), True),
+        StructField("transaction_amount", DoubleType(), True),
+        StructField("transaction_type", StringType(), True),
+        StructField("merchant_category", StringType(), True),
+        StructField("location", StringType(), True),
+        StructField("is_fraud", IntegerType(), True)
+    ])
+    
+    # Generate data
+    transaction_data = []
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    
+    for i in range(num_transactions):
+        transaction_id = f"TXN_{i:010d}"
+        customer_id = random.choice(customer_ids)
+        
+        # Generate random date between start and end
+        random_days = random.randint(0, (end_dt - start_dt).days)
+        transaction_date = start_dt + timedelta(days=random_days)
+        
+        transaction_amount = random.uniform(1, 5000)
+        transaction_type = random.choice(["Purchase", "Withdrawal", "Transfer", "Deposit"])
+        merchant_category = random.choice(["Retail", "Groceries", "Entertainment", "Utilities", "Travel"])
+        location = random.choice(["New York", "California", "Texas", "Florida", "Illinois"])
+        is_fraud = random.choices([0, 1], weights=[0.98, 0.02])[0]
+        
+        transaction_data.append((
+            transaction_id, customer_id, transaction_date, transaction_amount,
+            transaction_type, merchant_category, location, is_fraud
+        ))
+    
+    # Create Spark DataFrame
+    transaction_df = spark.createDataFrame(transaction_data, transaction_schema)
+    
+    # Convert to pandas for Kedro compatibility
+    pandas_df = transaction_df.toPandas()
+    
+    spark.stop()
+    
+    return pandas_df
+
+def process_customer_data(customers: pd.DataFrame) -> pd.DataFrame:
+    """Process customer data"""
+    # Remove duplicates
+    customers_processed = customers.drop_duplicates(subset=['customer_id'])
+    
+    # Handle missing values
+    customers_processed['credit_score'] = customers_processed['credit_score'].fillna(
+        customers_processed['credit_score'].median()
+    )
+    customers_processed['annual_income'] = customers_processed['annual_income'].fillna(
+        customers_processed['annual_income'].median()
+    )
+    
+    return customers_processed
+
+def process_transaction_data(transactions: pd.DataFrame) -> pd.DataFrame:
+    """Process transaction data"""
+    # Remove duplicates
+    transactions_processed = transactions.drop_duplicates(subset=['transaction_id'])
+    
+    # Handle missing values
+    transactions_processed['transaction_amount'] = transactions_processed['transaction_amount'].fillna(0)
+    transactions_processed['is_fraud'] = transactions_processed['is_fraud'].fillna(0)
+    
+    return transactions_processed
