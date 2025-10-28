@@ -1,0 +1,27 @@
+from typing import Dict
+from kedro.pipeline import Pipeline
+
+from .data_processing.pipeline import create_pipeline as data_processing_pipeline
+from .feature_engineering.pipeline import create_pipeline as feature_engineering_pipeline
+from .model_training.pipeline import create_pipeline as model_training_pipeline
+from .prediction.pipeline import create_pipeline as prediction_pipeline
+
+def register_pipelines() -> Dict[str, Pipeline]:
+    """Register the project's pipelines.
+    
+    Returns:
+        A mapping from pipeline names to Pipeline objects.
+    """
+    
+    data_processing = data_processing_pipeline()
+    feature_engineering = feature_engineering_pipeline()
+    model_training = model_training_pipeline()
+    prediction = prediction_pipeline()
+    
+    return {
+        "data_processing": data_processing,
+        "feature_engineering": feature_engineering,
+        "model_training": model_training,
+        "prediction": prediction,
+        "__default__": data_processing + feature_engineering + model_training + prediction,
+    }
