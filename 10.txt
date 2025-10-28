@@ -1,0 +1,26 @@
+from kedro.pipeline import Pipeline, node, pipeline
+from .nodes import make_predictions, save_predictions
+
+def create_pipeline(**kwargs) -> Pipeline:
+    return pipeline(
+        [
+            node(
+                func=make_predictions,
+                inputs=[
+                    "trained_classifier",
+                    "feature_encoder", 
+                    "scaler",
+                    "feature_engineered_data",
+                    "params:prediction"
+                ],
+                outputs="raw_predictions",
+                name="make_predictions_node",
+            ),
+            node(
+                func=save_predictions,
+                inputs="raw_predictions",
+                outputs="predictions",
+                name="save_predictions_node",
+            ),
+        ]
+    )
