@@ -1,0 +1,185 @@
+import pandas as pd
+import numpy as np
+from pyspark.sql import SparkSession
+from pyspark.sql.types import *
+from pyspark.sql import functions as F
+from datetime import datetime, timedelta
+import random
+import os
+
+def generate_customer_data_spark(num_customers: int) -> str:
+    """Generate customer data using PySpark and save as Parquet"""
+    
+    # Initialize Spark session
+    spark = SparkSession.builder \
+        .appName("CustomerDataGeneration") \
+        .config("spark.sql.adaptive.enabled", "true") \
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
+        .getOrCreate()
+    
+    # Generate data using Spark
+    customer_data = []
+    for i in range(num_customers):
+        customer_id = f"CUST_{i:08d}"
+        age = random.randint(18, 80)
+        gender = random.choice(["Male", "Female"])
+        annual_income = round(random.uniform(20000, 200000), 2)
+        credit_score = random.randint(300, 850)
+        account_balance = round(random.uniform(1000, 100000), 2)
+        employment_status = random.choice(["Employed", "Self-Employed", "Unemployed", "Retired"])
+        education_level = random.choice(["High School", "Bachelor", "Master", "PhD"])
+        marital_status = random.choice(["Single", "Married", "Divorced", "Widowed"])
+        num_dependents = random.randint(0, 5)
+        years_with_bank = random.randint(0, 20)
+        total_products = random.randint(1, 6)
+        
+        customer_data.append((
+            customer_id, age, gender, annual_income, credit_score,
+            account_balance, employment_status, education_level,
+            marital_status, num_dependents, years_with_bank, total_products
+        ))
+    
+    # Create Spark DataFrame
+    customer_schema = StructType([
+        StructField("customer_id", StringType(), True),
+        StructField("age", IntegerType(), True),
+        StructField("gender", StringType(), True),
+        StructField("annual_income", DoubleType(), True),
+        StructField("credit_score", IntegerType(), True),
+        StructField("account_balance", DoubleType(), True),
+        StructField("employment_status", StringType(), True),
+        StructField("education_level", StringType(), True),
+        StructField("marital_status", StringType(), True),
+        StructField("num_dependents", IntegerType(), True),
+        StructField("years_with_bank", IntegerType(), True),
+        StructField("total_products", IntegerType(), True)
+    ])
+    
+    customer_df = spark.createDataFrame(customer_data, customer_schema)
+    
+    # Save as Parquet using PySpark
+    output_path = "data/01_raw/customers.parquet"
+    customer_df.write.mode("overwrite").parquet(output_path)
+    
+    print(f"✅ Generated {num_customers} customer records and saved to {output_path}")
+    print(f"📊 Customer data schema: {customer_df.schema}")
+    
+    spark.stop()
+    
+    return output_path
+
+def generate_transaction_data_spark(num_transactions: int, start_date: str, end_date: str, customers_path: str) -> str:
+    """Generate transaction data using PySpark and save as Parquet"""
+    
+    spark = SparkSession.builder \
+        .appName("TransactionDataGeneration") \
+        .config("spark.sql.adaptive.enabled", "true") \
+        .getOrCreate()
+    
+    # Read customer data to get customer IDs
+    customers_df = spark.read.parquet(customers_path)
+    customer_ids = [row.customer_id for row in customers_df.select("customer_id").collect()]
+    
+    # Generate transaction data
+    transaction_data = []
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    
+    for i in range(num_transactions):
+        transaction_id = f"TXN_{i:010d}"
+        customer_id = random.choice(customer_ids)
+        
+        # Generate random date between start and end
+        random_days = random.randint(0, (end_dt - start_dt).days)
+        random_seconds = random.randint(0, 86400)  # Random time within day
+        transaction_date = start_dt + timedelta(days=random_days, seconds=random_seconds)
+        
+        transaction_amount = round(random.uniform(1, 5000), 2)
+        transaction_type = random.choice(["Purchase", "Withdrawal", "Transfer", "Deposit"])
+        merchant_category = random.choice(["Retail", "Groceries", "Entertainment", "Utilities", "Travel"])
+        location = random.choice(["New York", "California", "Texas", "Florida", "Illinois"])
+        is_fraud = random.choices([0, 1], weights=[0.98, 0.02])[0]
+        
+        transaction_data.append((
+            transaction_id, customer_id, transaction_date, transaction_amount,
+            transaction_type, merchant_category, location, is_fraud
+        ))
+    
+    # Create Spark DataFrame
+    transaction_schema = StructType([
+        StructField("transaction_id", StringType(), True),
+        StructField("customer_id", StringType(), True),
+        StructField("transaction_date", TimestampType(), True),
+        StructField("transaction_amount", DoubleType(), True),
+        StructField("transaction_type", StringType(), True),
+        StructField("merchant_category", StringType(), True),
+        StructField("location", StringType(), True),
+        StructField("is_fraud", IntegerType(), True)
+    ])
+    
+    transaction_df = spark.createDataFrame(transaction_data, transaction_schema)
+    
+    # Save as Parquet using PySpark
+    output_path = "data/01_raw/transactions.parquet"
+    transaction_df.write.mode("overwrite").parquet(output_path)
+    
+    print(f"✅ Generated {num_transactions} transaction records and saved to {output_path}")
+    print(f"📊 Transaction data schema: {transaction_df.schema}")
+    
+    # Show some stats
+    print("📈 Transaction Data Summary:")
+    transaction_df.select(
+        F.count("transaction_id").alias("total_transactions"),
+        F.avg("transaction_amount").alias("avg_amount"),
+        F.sum("is_fraud").alias("fraudulent_transactions")
+    ).show()
+    
+    spark.stop()
+    
+    return output_path
+
+def process_customer_data_pandas(customers_path: str) -> pd.DataFrame:
+    """Read Parquet with pandas and process customer data"""
+    
+    # Read Parquet file using pandas
+    customers_df = pd.read_parquet(customers_path)
+    
+    print(f"📖 Read {len(customers_df)} customer records from {customers_path}")
+    
+    # Remove duplicates
+    customers_processed = customers_df.drop_duplicates(subset=['customer_id'])
+    
+    # Handle missing values
+    customers_processed['credit_score'] = customers_processed['credit_score'].fillna(
+        customers_processed['credit_score'].median()
+    )
+    customers_processed['annual_income'] = customers_processed['annual_income'].fillna(
+        customers_processed['annual_income'].median()
+    )
+    
+    print(f"✅ Processed {len(customers_processed)} customer records")
+    
+    return customers_processed
+
+def process_transaction_data_pandas(transactions_path: str) -> pd.DataFrame:
+    """Read Parquet with pandas and process transaction data"""
+    
+    # Read Parquet file using pandas
+    transactions_df = pd.read_parquet(transactions_path)
+    
+    print(f"📖 Read {len(transactions_df)} transaction records from {transactions_path}")
+    
+    # Remove duplicates
+    transactions_processed = transactions_df.drop_duplicates(subset=['transaction_id'])
+    
+    # Handle missing values
+    transactions_processed['transaction_amount'] = transactions_processed['transaction_amount'].fillna(0)
+    transactions_processed['is_fraud'] = transactions_processed['is_fraud'].fillna(0)
+    
+    # Convert transaction_date to datetime if it's not already
+    if not pd.api.types.is_datetime64_any_dtype(transactions_processed['transaction_date']):
+        transactions_processed['transaction_date'] = pd.to_datetime(transactions_processed['transaction_date'])
+    
+    print(f"✅ Processed {len(transactions_processed)} transaction records")
+    
+    return transactions_processed
