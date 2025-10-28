@@ -1,0 +1,37 @@
+from kedro.pipeline import Pipeline, node, pipeline
+from .nodes import (
+    encode_categorical_features,
+    scale_numerical_features,
+    train_classifier,
+    evaluate_model
+)
+
+def create_pipeline(**kwargs) -> Pipeline:
+    return pipeline(
+        [
+            node(
+                func=encode_categorical_features,
+                inputs=["X_train", "X_test", "params:feature_engineering.categorical_features"],
+                outputs=["X_train_encoded", "X_test_encoded", "feature_encoder"],
+                name="encode_categorical_features_node",
+            ),
+            node(
+                func=scale_numerical_features,
+                inputs=["X_train_encoded", "X_test_encoded", "params:feature_engineering.numerical_features"],
+                outputs=["X_train_scaled", "X_test_scaled", "scaler"],
+                name="scale_numerical_features_node",
+            ),
+            node(
+                func=train_classifier,
+                inputs=["X_train_scaled", "y_train", "params:model_training"],
+                outputs="trained_classifier",
+                name="train_classifier_node",
+            ),
+            node(
+                func=evaluate_model,
+                inputs=["trained_classifier", "X_test_scaled", "y_test"],
+                outputs="model_metrics",
+                name="evaluate_model_node",
+            ),
+        ]
+    )
