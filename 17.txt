@@ -1,0 +1,68 @@
+# Raw Data Paths (output from PySpark generation)
+raw_customers_path:
+  type: text.TextDataSet
+  filepath: data/01_raw/customers_path.txt
+
+raw_transactions_path:
+  type: text.TextDataSet
+  filepath: data/01_raw/transactions_path.txt
+
+# Processed Data (pandas DataFrames)
+processed_customers:
+  type: pandas.ParquetDataSet
+  filepath: data/02_intermediate/processed_customers.parquet
+
+processed_transactions:
+  type: pandas.ParquetDataSet
+  filepath: data/02_intermediate/processed_transactions.parquet
+
+customer_transaction_features:
+  type: pandas.ParquetDataSet
+  filepath: data/03_primary/customer_transaction_features.parquet
+
+# Feature Engineering
+feature_engineered_data:
+  type: pandas.ParquetDataSet
+  filepath: data/04_feature/feature_engineered_data.parquet
+
+# Model Data
+X_train:
+  type: pandas.ParquetDataSet
+  filepath: data/05_model_input/X_train.parquet
+
+X_test:
+  type: pandas.ParquetDataSet
+  filepath: data/05_model_input/X_test.parquet
+
+y_train:
+  type: pandas.ParquetDataSet
+  filepath: data/05_model_input/y_train.parquet
+
+y_test:
+  type: pandas.ParquetDataSet
+  filepath: data/05_model_input/y_test.parquet
+
+# Models
+trained_classifier:
+  type: pickle.PickleDataSet
+  filepath: data/06_models/classifier.pkl
+  versioned: true
+
+feature_encoder:
+  type: pickle.PickleDataSet
+  filepath: data/06_models/feature_encoder.pkl
+  versioned: true
+
+scaler:
+  type: pickle.PickleDataSet
+  filepath: data/06_models/scaler.pkl
+  versioned: true
+
+# Predictions
+predictions:
+  type: pandas.ParquetDataSet
+  filepath: data/07_model_output/predictions.parquet
+
+model_metrics:
+  type: json.JSONDataSet
+  filepath: data/08_reporting/model_metrics.json
