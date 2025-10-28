@@ -1,0 +1,56 @@
+#!/usr/bin/env python
+"""Test script to verify pipelines are working."""
+
+import sys
+import os
+
+# Add src to Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+def test_pipeline_registration():
+    """Test that pipelines can be registered successfully."""
+    try:
+        from banking_ml_pipeline.pipelines import register_pipelines
+        
+        # Get all pipelines
+        pipelines = register_pipelines()
+        
+        print("✅ Successfully registered pipelines!")
+        print("Available pipelines:")
+        for pipeline_name in pipelines.keys():
+            print(f"  - {pipeline_name}")
+            
+        # Test specific pipeline
+        if "data_processing" in pipelines:
+            print("✅ 'data_processing' pipeline found!")
+            data_processing_pipe = pipelines["data_processing"]
+            print(f"   Nodes in data_processing pipeline: {len(data_processing_pipe.nodes)}")
+        else:
+            print("❌ 'data_processing' pipeline NOT found!")
+            
+        if "feature_engineering" in pipelines:
+            print("✅ 'feature_engineering' pipeline found!")
+        else:
+            print("❌ 'feature_engineering' pipeline NOT found!")
+            
+        if "model_training" in pipelines:
+            print("✅ 'model_training' pipeline found!")
+        else:
+            print("❌ 'model_training' pipeline NOT found!")
+            
+        if "prediction" in pipelines:
+            print("✅ 'prediction' pipeline found!")
+        else:
+            print("❌ 'prediction' pipeline NOT found!")
+            
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+if __name__ == "__main__":
+    success = test_pipeline_registration()
+    sys.exit(0 if success else 1)
