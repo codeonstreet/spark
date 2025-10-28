@@ -1,0 +1,45 @@
+from kedro.pipeline import Pipeline, node, pipeline
+from banking_ml_pipeline.pipelines.data_processing.nodes import (
+    generate_customer_data_spark, 
+    generate_transaction_data_spark, 
+    process_customer_data_pandas, 
+    process_transaction_data_pandas
+)
+
+def create_pipeline(**kwargs) -> Pipeline:
+    """Create the data processing pipeline."""
+    
+    return pipeline(
+        [
+            node(
+                func=generate_customer_data_spark,
+                inputs="params:data_generation.num_customers",
+                outputs="raw_customers_path",
+                name="generate_customer_data_node",
+            ),
+            node(
+                func=generate_transaction_data_spark,
+                inputs=[
+                    "params:data_generation.num_transactions", 
+                    "params:data_generation.start_date",
+                    "params:data_generation.end_date",
+                    "raw_customers_path"
+                ],
+                outputs="raw_transactions_path",
+                name="generate_transaction_data_node",
+            ),
+            node(
+                func=process_customer_data_pandas,
+                inputs="raw_customers_path",
+                outputs="processed_customers",
+                name="process_customer_data_node",
+            ),
+            node(
+                func=process_transaction_data_pandas,
+                inputs="raw_transactions_path",
+                outputs="processed_transactions",
+                name="process_transaction_data_node",
+            ),
+        ],
+        tags="data_processing"
+    )
