@@ -1,0 +1,70 @@
+import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+import json
+import joblib
+
+def encode_categorical_features(X_train: pd.DataFrame, X_test: pd.DataFrame, categorical_features: list) -> tuple:
+    """Encode categorical features using LabelEncoder"""
+    
+    encoders = {}
+    X_train_encoded = X_train.copy()
+    X_test_encoded = X_test.copy()
+    
+    for feature in categorical_features:
+        if feature in X_train.columns:
+            encoder = LabelEncoder()
+            X_train_encoded[feature] = encoder.fit_transform(X_train[feature].astype(str))
+            X_test_encoded[feature] = encoder.transform(X_test[feature].astype(str))
+            encoders[feature] = encoder
+    
+    return X_train_encoded, X_test_encoded, encoders
+
+def scale_numerical_features(X_train: pd.DataFrame, X_test: pd.DataFrame, numerical_features: list) -> tuple:
+    """Scale numerical features using StandardScaler"""
+    
+    scaler = StandardScaler()
+    X_train_scaled = X_train.copy()
+    X_test_scaled = X_test.copy()
+    
+    for feature in numerical_features:
+        if feature in X_train.columns:
+            X_train_scaled[feature] = scaler.fit_transform(X_train[[feature]])
+            X_test_scaled[feature] = scaler.transform(X_test[[feature]])
+    
+    return X_train_scaled, X_test_scaled, scaler
+
+def train_classifier(X_train: pd.DataFrame, y_train: pd.Series, parameters: dict) -> RandomForestClassifier:
+    """Train Random Forest classifier"""
+    
+    model_params = parameters["model_params"]
+    classifier = RandomForestClassifier(**model_params)
+    
+    classifier.fit(X_train, y_train)
+    
+    return classifier
+
+def evaluate_model(classifier: RandomForestClassifier, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
+    """Evaluate model performance and return metrics"""
+    
+    y_pred = classifier.predict(X_test)
+    y_pred_proba = classifier.predict_proba(X_test)
+    
+    accuracy = accuracy_score(y_test, y_pred)
+    class_report = classification_report(y_test, y_pred, output_dict=True)
+    conf_matrix = confusion_matrix(y_test, y_pred).tolist()
+    
+    metrics = {
+        "accuracy": accuracy,
+        "classification_report": class_report,
+        "confusion_matrix": conf_matrix,
+        "feature_importance": dict(zip(X_test.columns, classifier.feature_importances_))
+    }
+    
+    print(f"Model Accuracy: {accuracy:.4f}")
+    print("\nClassification Report:")
+    print(classification_report(y_test, y_pred))
+    
+    return metrics
