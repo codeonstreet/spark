@@ -1,0 +1,44 @@
+from kedro.pipeline import Pipeline, node, pipeline
+from .nodes import (
+    create_customer_transaction_features,
+    create_target_variable,
+    engineer_features,
+    prepare_model_data,
+    split_data
+)
+
+def create_pipeline(**kwargs) -> Pipeline:
+    return pipeline(
+        [
+            node(
+                func=create_customer_transaction_features,
+                inputs=["processed_customers", "processed_transactions"],
+                outputs="customer_transaction_features",
+                name="create_customer_transaction_features_node",
+            ),
+            node(
+                func=create_target_variable,
+                inputs="customer_transaction_features",
+                outputs="features_with_target",
+                name="create_target_variable_node",
+            ),
+            node(
+                func=engineer_features,
+                inputs="features_with_target",
+                outputs="feature_engineered_data",
+                name="engineer_features_node",
+            ),
+            node(
+                func=prepare_model_data,
+                inputs=["feature_engineered_data", "params:feature_engineering"],
+                outputs=["X", "y", "feature_names"],
+                name="prepare_model_data_node",
+            ),
+            node(
+                func=split_data,
+                inputs=["X", "y", "params:model_training"],
+                outputs=["X_train", "X_test", "y_train", "y_test"],
+                name="split_data_node",
+            ),
+        ]
+    )
