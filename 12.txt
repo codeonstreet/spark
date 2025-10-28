@@ -1,0 +1,11 @@
+[tool.kedro]
+package_name = "banking_ml_pipeline"
+project_name = "Banking ML Pipeline"
+python_package = "banking_ml_pipeline"
+
+[tool.black]
+line-length = 88
+target-version = ['py38', 'py39', 'py310']
+
+[tool.isort]
+profile = "black"
