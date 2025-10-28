@@ -1,0 +1,232 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.types import *
+from pyspark.sql import functions as F
+from datetime import datetime
+import os
+
+def generate_customer_data_spark(num_customers: int) -> str:
+    """Generate customer data using PySpark and save as Parquet"""
+    
+    print("🚀 Generating customer data with PySpark...")
+    
+    # Initialize Spark session
+    spark = SparkSession.builder \
+        .appName("CustomerDataGeneration") \
+        .config("spark.sql.adaptive.enabled", "true") \
+        .getOrCreate()
+    
+    # Define choices for categorical variables
+    genders = ["Male", "Female"]
+    employment_statuses = ["Employed", "Self-Employed", "Unemployed", "Retired"]
+    education_levels = ["High School", "Bachelor", "Master", "PhD"]
+    marital_statuses = ["Single", "Married", "Divorced", "Widowed"]
+    
+    # Generate base DataFrame with spark.range
+    customers_df = spark.range(num_customers) \
+        .withColumn("customer_id", F.concat(F.lit("CUST_"), F.lpad(F.col("id"), 8, "0"))) \
+        .withColumn("age", (F.rand() * 62 + 18).cast("integer")) \
+        .withColumn("gender", F.element_at(F.array([F.lit(g) for g in genders]), (F.rand() * len(genders) + 1).cast("integer"))) \
+        .withColumn("annual_income", F.round(F.rand() * 180000 + 20000, 2)) \
+        .withColumn("credit_score", (F.rand() * 550 + 300).cast("integer")) \
+        .withColumn("account_balance", F.round(F.rand() * 99000 + 1000, 2)) \
+        .withColumn("employment_status", F.element_at(F.array([F.lit(e) for e in employment_statuses]), (F.rand() * len(employment_statuses) + 1).cast("integer"))) \
+        .withColumn("education_level", F.element_at(F.array([F.lit(e) for e in education_levels]), (F.rand() * len(education_levels) + 1).cast("integer"))) \
+        .withColumn("marital_status", F.element_at(F.array([F.lit(m) for m in marital_statuses]), (F.rand() * len(marital_statuses) + 1).cast("integer"))) \
+        .withColumn("num_dependents", (F.rand() * 6).cast("integer")) \
+        .withColumn("years_with_bank", (F.rand() * 21).cast("integer")) \
+        .withColumn("total_products", (F.rand() * 5 + 1).cast("integer")) \
+        .drop("id")
+    
+    # Save as distributed Parquet files
+    output_path = "data/01_raw/customers"
+    
+    # Clean up existing directory
+    if os.path.exists(output_path):
+        import shutil
+        shutil.rmtree(output_path)
+    
+    # Write as distributed Parquet
+    customers_df.write.mode("overwrite").parquet(output_path)
+    
+    print(f"✅ Generated {num_customers} customer records")
+    print(f"💾 Saved to: {output_path}")
+    
+    # Show statistics
+    print("📈 Customer Data Summary:")
+    customers_df.select([
+        F.count("*").alias("total_customers"),
+        F.avg("annual_income").alias("avg_income"),
+        F.avg("credit_score").alias("avg_credit_score"),
+        F.avg("account_balance").alias("avg_balance")
+    ]).show()
+    
+    spark.stop()
+    
+    return output_path
+
+def generate_transaction_data_spark(num_transactions: int, start_date: str, end_date: str) -> str:
+    """Generate transaction data using PySpark and save as Parquet"""
+    
+    print("🚀 Generating transaction data with PySpark...")
+    
+    spark = SparkSession.builder \
+        .appName("TransactionDataGeneration") \
+        .config("spark.sql.adaptive.enabled", "true") \
+        .getOrCreate()
+    
+    # Read customer data to get customer IDs
+    customers_path = "data/01_raw/customers"
+    customers_df = spark.read.parquet(customers_path)
+    customer_count = customers_df.count()
+    
+    print(f"📖 Using {customer_count} customers for transaction generation")
+    
+    # Define choices for categorical variables
+    transaction_types = ["Purchase", "Withdrawal", "Transfer", "Deposit"]
+    merchant_categories = ["Retail", "Groceries", "Entertainment", "Utilities", "Travel"]
+    locations = ["New York", "California", "Texas", "Florida", "Illinois"]
+    
+    # Convert date strings to timestamps
+    start_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
+    end_ts = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
+    
+    # Generate transactions using spark.range
+    transactions_df = spark.range(num_transactions) \
+        .withColumn("transaction_id", F.concat(F.lit("TXN_"), F.lpad(F.col("id"), 10, "0"))) \
+        .withColumn("customer_id", 
+                   F.concat(F.lit("CUST_"), 
+                           F.lpad((F.rand() * customer_count).cast("integer"), 8, "0"))) \
+        .withColumn("transaction_date", 
+                   F.from_unixtime(F.rand() * (end_ts - start_ts) + start_ts)) \
+        .withColumn("transaction_amount", F.round(F.rand() * 4999 + 1, 2)) \
+        .withColumn("transaction_type", 
+                   F.element_at(F.array([F.lit(t) for t in transaction_types]), 
+                               (F.rand() * len(transaction_types) + 1).cast("integer"))) \
+        .withColumn("merchant_category", 
+                   F.element_at(F.array([F.lit(m) for m in merchant_categories]), 
+                               (F.rand() * len(merchant_categories) + 1).cast("integer"))) \
+        .withColumn("location", 
+                   F.element_at(F.array([F.lit(l) for l in locations]), 
+                               (F.rand() * len(locations) + 1).cast("integer"))) \
+        .withColumn("is_fraud", 
+                   F.when(F.rand() < 0.02, 1).otherwise(0).cast("integer")) \
+        .drop("id")
+    
+    # Save as distributed Parquet files
+    output_path = "data/01_raw/transactions"
+    
+    # Clean up existing directory
+    if os.path.exists(output_path):
+        import shutil
+        shutil.rmtree(output_path)
+    
+    # Write as distributed Parquet
+    transactions_df.write.mode("overwrite").parquet(output_path)
+    
+    print(f"✅ Generated {num_transactions} transaction records")
+    print(f"💾 Saved to: {output_path}")
+    
+    # Show statistics
+    print("📈 Transaction Data Summary:")
+    transactions_df.select([
+        F.count("*").alias("total_transactions"),
+        F.avg("transaction_amount").alias("avg_amount"),
+        F.sum("is_fraud").alias("fraudulent_transactions"),
+        F.countDistinct("customer_id").alias("unique_customers")
+    ]).show()
+    
+    spark.stop()
+    
+    return output_path
+
+def process_customer_data() -> str:
+    """Process customer data using PySpark"""
+    
+    input_path = "data/01_raw/customers"
+    output_path = "data/02_intermediate/processed_customers"
+    
+    print(f"🔧 Processing customer data from {input_path}")
+    
+    spark = SparkSession.builder \
+        .appName("CustomerDataProcessing") \
+        .getOrCreate()
+    
+    # Read customer data
+    customers_df = spark.read.parquet(input_path)
+    
+    initial_count = customers_df.count()
+    print(f"📖 Read {initial_count} customer records")
+    
+    # Remove duplicates
+    customers_processed = customers_df.dropDuplicates(["customer_id"])
+    final_count = customers_processed.count()
+    
+    if initial_count != final_count:
+        print(f"⚠️  Removed {initial_count - final_count} duplicate customer records")
+    
+    # Handle missing values
+    from pyspark.sql.functions import median
+    
+    # Calculate medians for imputation
+    credit_median = customers_processed.approxQuantile("credit_score", [0.5], 0.01)[0]
+    income_median = customers_processed.approxQuantile("annual_income", [0.5], 0.01)[0]
+    
+    customers_processed = customers_processed \
+        .fillna({"credit_score": credit_median, "annual_income": income_median})
+    
+    # Save processed data
+    if os.path.exists(output_path):
+        import shutil
+        shutil.rmtree(output_path)
+    
+    customers_processed.write.mode("overwrite").parquet(output_path)
+    
+    print(f"✅ Processed {final_count} customer records")
+    print(f"💾 Saved to: {output_path}")
+    
+    spark.stop()
+    
+    return output_path
+
+def process_transaction_data() -> str:
+    """Process transaction data using PySpark"""
+    
+    input_path = "data/01_raw/transactions"
+    output_path = "data/02_intermediate/processed_transactions"
+    
+    print(f"🔧 Processing transaction data from {input_path}")
+    
+    spark = SparkSession.builder \
+        .appName("TransactionDataProcessing") \
+        .getOrCreate()
+    
+    # Read transaction data
+    transactions_df = spark.read.parquet(input_path)
+    
+    initial_count = transactions_df.count()
+    print(f"📖 Read {initial_count} transaction records")
+    
+    # Remove duplicates
+    transactions_processed = transactions_df.dropDuplicates(["transaction_id"])
+    final_count = transactions_processed.count()
+    
+    if initial_count != final_count:
+        print(f"⚠️  Removed {initial_count - final_count} duplicate transaction records")
+    
+    # Handle missing values
+    transactions_processed = transactions_processed \
+        .fillna({"transaction_amount": 0, "is_fraud": 0})
+    
+    # Save processed data
+    if os.path.exists(output_path):
+        import shutil
+        shutil.rmtree(output_path)
+    
+    transactions_processed.write.mode("overwrite").parquet(output_path)
+    
+    print(f"✅ Processed {final_count} transaction records")
+    print(f"💾 Saved to: {output_path}")
+    
+    spark.stop()
+    
+    return output_path
