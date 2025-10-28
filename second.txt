@@ -1,0 +1,30 @@
+data_generation:
+  num_customers: 100000
+  num_transactions: 5000000
+  start_date: "2023-01-01"
+  end_date: "2024-01-01"
+
+feature_engineering:
+  numerical_features:
+    - "age"
+    - "annual_income"
+    - "account_balance"
+    - "transaction_amount_avg"
+    - "transaction_frequency"
+    - "credit_score"
+  categorical_features:
+    - "employment_status"
+    - "education_level"
+    - "marital_status"
+  target_column: "churn_risk"
+
+model_training:
+  test_size: 0.2
+  random_state: 42
+  model_params:
+    n_estimators: 100
+    max_depth: 10
+    random_state: 42
+
+prediction:
+  probability_threshold: 0.5
